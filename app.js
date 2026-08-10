@@ -10,11 +10,19 @@
 // ===== 指標映射 =====
 const METRIC_MAP = {
   '首銷目標': 'target', '目标': 'target', 'target': 'target',
+  '渠道首销目标': 'target', '渠道首销目标': 'target',
   '已達成': 'achieved', '已达成': 'achieved', 'achieved': 'achieved',
-  '達成率': 'achievement_rate', '达成率': 'achievement_rate',
+  '首销合计达成': 'achieved', '首销合计达成': 'achieved',
+  '达成率': 'achievement_rate', '達成率': 'achievement_rate',
+  '整体达成率': 'achievement_rate', '整體達成率': 'achievement_rate',
   '落後時間進度': 'behind_time_progress', '落后时间进度': 'behind_time_progress',
+  '进度落差': 'progress_gap', '進度落差': 'progress_gap',
   '上代同期': 'previous_gen_total',
+  '上代达成': 'previous_gen_total', '上代達成': 'previous_gen_total',
+  '上代实际': 'previous_gen_total', '上代實際': 'previous_gen_total',
   'YOY': 'yoy', 'yoy': 'yoy',
+  '同比变幅': 'yoy', '同比變幅': 'yoy',
+  '同比': 'yoy',
   '時間進度': 'time_progress', '时间进度': 'time_progress',
   '首銷日期': 'launch_date', '首销日期': 'launch_date',
   '報告日期': 'report_date', '报告日期': 'report_date',
@@ -22,6 +30,8 @@ const METRIC_MAP = {
   '標題': 'title', '标题': 'title', 'title': 'title',
   '產品佔比': 'product_mix', '产品占比': 'product_mix',
   '上代佔比': 'product_mix_prev', '上代占比': 'product_mix_prev',
+  // 渠道名不作為指標，跳過
+  '渠道': null, 'channel': null, '渠道名': null,
 };
 
 const CHANNEL_MAP = {
@@ -127,23 +137,41 @@ function parseSummary(header, rows, result) {
   for (const row of rows) {
     const cols = row.split('\t');
     if (cols.length < 2) continue;
-    const key = cols[0].trim();
-    const val = cols[1].trim();
-    const eng = METRIC_MAP[key] || key;
 
-    if (typeof eng === 'object') {
-      // 產品側
-      const { product, field } = eng;
-      if (!result.product_breakdown[product]) result.product_breakdown[product] = {};
-      result.product_breakdown[product][field || 'achieved'] = parseNum(val);
-    } else if (eng === 'product_mix') {
-      result.product_breakdown._mix = result.product_breakdown._mix || {};
-      result.product_breakdown._mix.current = val;
-    } else if (eng === 'product_mix_prev') {
-      result.product_breakdown._mix = result.product_breakdown._mix || {};
-      result.product_breakdown._mix.previous = val;
-    } else {
-      result.summary[eng] = ['launch_date', 'report_date', 'title'].includes(eng) ? val : parseNum(val);
+    // 遍歷每一列，嘗試找「指標名 → 數值」配對
+    for (let i = 0; i < cols.length - 1; i++) {
+      const key = cols[i].trim();
+      const val = cols[i + 1] ? cols[i + 1].trim() : '';
+
+      // 跳過空格或純數字當 key（數字不是指標名）
+      if (!key || /^\d+[\d,]*$/.test(key)) continue;
+      // 跳過日期格式的 key（20260807）
+      if (/^\d{8}$/.test(key)) continue;
+
+      const eng = METRIC_MAP[key];
+      // eng === null 表示這是渠道名等非指標，跳過
+      if (eng === null || eng === undefined) {
+        // 嘗試用原始 key 作為指標名（容錯）
+        // 但如果 val 是空的或是另一個指標名，跳過
+        if (!val || METRIC_MAP[val]) continue;
+        // 某些情況 key 是渠道名，val 是數值 → 跳過（渠道由 parseChannel 處理）
+        if (/^\d+[\d,.%]*$/.test(val)) continue;
+        continue;
+      }
+
+      if (typeof eng === 'object') {
+        const { product, field } = eng;
+        if (!result.product_breakdown[product]) result.product_breakdown[product] = {};
+        result.product_breakdown[product][field || 'achieved'] = parseNum(val);
+      } else if (eng === 'product_mix') {
+        result.product_breakdown._mix = result.product_breakdown._mix || {};
+        result.product_breakdown._mix.current = val;
+      } else if (eng === 'product_mix_prev') {
+        result.product_breakdown._mix = result.product_breakdown._mix || {};
+        result.product_breakdown._mix.previous = val;
+      } else {
+        result.summary[eng] = ['launch_date', 'report_date', 'title'].includes(eng) ? val : parseNum(val);
+      }
     }
   }
 }
@@ -468,9 +496,9 @@ function generateReport() {
     currentTitle = title || 'P12系列';
     const data = parseTSV(tsv);
 
-    // 驗證
-    if (!data.summary.target && !data.summary.achieved) {
-      showToast('⚠️ 未找到核心指標（首銷目標/已達成），請檢查數據格式');
+    // 驗證：至少有一個指標才生成
+    if (!data.summary.target && !data.summary.achieved && !data.summary.rate && data.channel_breakdown.length === 0) {
+      showToast('⚠️ 未找到核心指標，請檢查數據格式');
       return;
     }
 
