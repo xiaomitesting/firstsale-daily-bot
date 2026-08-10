@@ -126,7 +126,51 @@ input[type="text"]:focus, textarea:focus {
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
-/* ===== Upload Zone ===== */
+/* ===== Feishu Link ===== */
+.feishu-input-row {
+  display: flex;
+  gap: 8px;
+}
+.feishu-url-input {
+  flex: 1;
+  min-width: 0;
+}
+.btn-fetch {
+  padding: 10px 16px;
+  background: #00b96b;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.btn-fetch:hover { background: #00a35e; }
+.btn-fetch:disabled { background: #c0c4cc; cursor: not-allowed; }
+.feishu-status {
+  margin-top: 8px;
+  font-size: 13px;
+  min-height: 20px;
+}
+.feishu-status.loading { color: #3370ff; }
+.feishu-status.success { color: #00b96b; }
+.feishu-status.error { color: #f54a45; }
+.feishu-status .spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #dee0e3;
+  border-top-color: #3370ff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== Upload Zone (legacy) ===== */
 .upload-zone {
   border: 2px dashed #dee0e3;
   border-radius: 12px;

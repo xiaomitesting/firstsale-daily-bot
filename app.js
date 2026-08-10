@@ -575,36 +575,107 @@ DAY	1
 
 function loadTemplate(name) {
   document.getElementById('tsvInput').value = TEMPLATES[name] || '';
-  document.getElementById('productTitle').value = name === 'phone' ? 'P系列' : name === 'tablet' ? 'Pad系列' : '';
+  document.getElementById('productTitle').value = name === 'phone' ? 'P12系列' : name === 'tablet' ? 'Pad系列' : '';
   showSection('generator');
-  document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-  document.querySelector('.nav-links a').classList.add('active');
+  // 切回貼上 tab
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tabs .tab').classList.add('active');
+  document.getElementById('tab-paste').classList.add('active');
   showToast(`✅ ${name === 'phone' ? '手機' : name === 'tablet' ? '平板' : '空白'}模板已載入`);
 }
 
-// ===== 文件上傳 =====
-document.addEventListener('DOMContentLoaded', () => {
-  const dropZone = document.getElementById('dropZone');
-  const fileInput = document.getElementById('fileInput');
+// ===== Feishu 鏈接拉取 =====
+function parseFeishuUrl(url) {
+  url = url.trim();
+  // 支持格式：
+  // https://xiaomi.feishu.cn/sheets/xxxxxx?sheet=yyyyy
+  // https://xiaomi.feishu.cn/wiki/xxxxxx
+  // https://xiaomi.feishu.cn/base/xxxxxx?table=tblxxxx
+  // https://xiaomi.feishu.cn/docx/xxxxxx
+  const m = url.match(/feishu\.cn\/(sheets|wiki|base|docx|minutes)\/([A-Za-z0-9_-]+)/);
+  if (!m) return null;
+  return { type: m[1], token: m[2] };
+}
 
-  dropZone.addEventListener('click', () => fileInput.click());
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.classList.remove('dragover');
-    handleFile(e.dataTransfer.files[0]);
-  });
-  fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
-});
+async function fetchFeishu() {
+  const url = document.getElementById('feishuUrl').value.trim();
+  const statusEl = document.getElementById('feishuStatus');
+  const fetchBtn = document.getElementById('fetchBtn');
 
-function handleFile(file) {
-  if (!file) return;
-  document.getElementById('fileName').textContent = `📄 ${file.name}`;
-  const reader = new FileReader();
-  reader.onload = e => {
-    document.getElementById('tsvInput').value = e.target.result;
-    showToast('✅ 文件已載入，點擊「生成日報」');
-  };
-  reader.readAsText(file);
+  if (!url) {
+    statusEl.className = 'feishu-status error';
+    statusEl.textContent = '❌ 請輸入飛書鏈接';
+    return;
+  }
+
+  const info = parseFeishuUrl(url);
+  if (!info) {
+    statusEl.className = 'feishu-status error';
+    statusEl.textContent = '❌ 無法識別鏈接格式，請確認是飛書表格鏈接';
+    return;
+  }
+
+  statusEl.className = 'feishu-status loading';
+  statusEl.innerHTML = '<span class="spinner"></span>正在拉取數據...';
+  fetchBtn.disabled = true;
+
+  try {
+    // 用公開導出接口嘗試拉取
+    let data = null;
+
+    if (info.type === 'sheets') {
+      data = await fetchSheetsData(info.token);
+    } else if (info.type === 'wiki') {
+      // Wiki 需要先解析 node token 得到實際 doc token
+      data = await fetchWikiData(info.token);
+    } else if (info.type === 'base') {
+      statusEl.className = 'feishu-status error';
+      statusEl.innerHTML = '⚠️ 多維表格暫不支持自動拉取。<br>請在飛書中選中數據 → Ctrl+C → 粘貼到下方文本框。';
+      fetchBtn.disabled = false;
+      return;
+    } else {
+      statusEl.className = 'feishu-status error';
+      statusEl.innerHTML = '⚠️ 該類型文檔暫不支持自動拉取。<br>請在飛書中選中數據 → Ctrl+C → 粘貼到下方文本框。';
+      fetchBtn.disabled = false;
+      return;
+    }
+
+    if (data && data.trim()) {
+      document.getElementById('feishuTsv').value = data;
+      statusEl.className = 'feishu-status success';
+      statusEl.textContent = '✅ 數據已拉取！點擊下方「用粘貼的數據生成日報」繼續。';
+    } else {
+      throw new Error('返回數據為空');
+    }
+  } catch (e) {
+    console.error('Fetch error:', e);
+    statusEl.className = 'feishu-status error';
+    statusEl.innerHTML = `⚠️ 自動拉取失敗：${e.message}<br>請在飛書中選中數據 → Ctrl+C → 粘貼到下方文本框。`;
+  } finally {
+    fetchBtn.disabled = false;
+  }
+}
+
+async function fetchSheetsData(token) {
+  // 嘗試用公開導出接口
+  const exportUrl = `https://open.feishu.cn/open-apis/sheets/v2/export/${token}`;
+  // 由於 CORS 限制，直接調用會失敗
+  // 改用提示用戶手動粘貼
+  throw new Error('飛書表格需要授權才能訪問，請手動粘貼數據');
+}
+
+async function fetchWikiData(token) {
+  throw new Error('飛書 Wiki 需要授權才能訪問，請手動粘貼數據');
+}
+
+function useFeishuTsv() {
+  const tsv = document.getElementById('feishuTsv').value.trim();
+  if (!tsv) {
+    showToast('❌ 請先粘貼數據');
+    return;
+  }
+  // 把飛書 TSV 複製到主輸入框
+  document.getElementById('tsvInput').value = tsv;
+  generateReport();
 }
