@@ -124,10 +124,12 @@ P12A	7782	6070	31.7
             </div>
           </div>
           <div class="preview-actions" id="previewActions" style="display:none;">
+            <button class="btn-secondary" onclick="copyText()" style="background:#3370ff;color:white;">📋 複製文本（發群用）</button>
             <button class="btn-secondary" onclick="copyJSON()">📋 複製 JSON</button>
             <button class="btn-secondary" onclick="downloadJSON()">💾 下載 JSON</button>
             <button class="btn-secondary" onclick="copyMarkdown()">📝 複製 Markdown</button>
           </div>
+          <div id="textPreview" style="display:none;margin-top:16px;padding:16px;background:#f5f6f7;border-radius:8px;font-size:13px;line-height:1.8;white-space:pre-wrap;font-family:monospace;max-height:400px;overflow-y:auto;"></div>
         </div>
       </div>
     </section>

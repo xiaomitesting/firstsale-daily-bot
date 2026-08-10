@@ -336,6 +336,108 @@ function parseColor(header, rows, result) {
   }
 }
 
+// ===== 文本生成（純文本，可複製發群） =====
+function generateText(data, title) {
+  const s = data.summary;
+  const lines = [];
+
+  // 標題行：P12系列首銷激活進展DAY 32 - 6/29（時間進度97%）
+  let header = `${title}首銷激活進展`;
+  if (s.day_number) header += `DAY ${s.day_number}`;
+  const suffixParts = [];
+  if (s.report_date) {
+    const dateStr = String(s.report_date);
+    const m = dateStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    suffixParts.push(m ? `${parseInt(m[2])}/${parseInt(m[3])}` : dateStr);
+  }
+  if (s.time_progress) suffixParts.push(`時間進度${s.time_progress}%`);
+  if (suffixParts.length) {
+    lines.push(`${header} - ${suffixParts.join(' - ')}（${suffixParts.join('，')}）`);
+  } else {
+    lines.push(header);
+  }
+  lines.push('');
+
+  // 銷售數據摘要（一段話）
+  const summaryParts = [];
+  if (s.target != null) summaryParts.push(`首銷目標${numStr(s.target)}台`);
+  if (s.achieved != null) summaryParts.push(`首銷達成${numStr(s.achieved)}台`);
+  const rate = s.achievement_rate || safeDiv(s.achieved, s.target);
+  if (rate != null) summaryParts.push(`首銷達成率${rate.toFixed(0)}%`);
+  if (s.behind_time_progress != null) summaryParts.push(`落後時間進度${s.behind_time_progress.toFixed(0)}pp`);
+  if (s.previous_gen_total != null) summaryParts.push(`上代同期達成${numStr(s.previous_gen_total)}台`);
+  if (s.yoy != null) summaryParts.push(`YOY ${s.yoy > 0 ? '+' : ''}${s.yoy.toFixed(0)}%`);
+  if (s.day_number && s.daily_target) summaryParts.push(`Day ${s.day_number}激活目標${numStr(s.daily_target)}台`);
+  if (s.day_number && s.daily_achieved) summaryParts.push(`激活達成${numStr(s.daily_achieved)}台`);
+  if (s.daily_rate) summaryParts.push(`日目標達成率${s.daily_rate.toFixed(0)}%`);
+  lines.push('• 銷售數據：' + summaryParts.join('，'));
+  lines.push('');
+
+  // 產品側
+  const products = Object.entries(data.product_breakdown).filter(([k]) => !k.startsWith('_'));
+  if (products.length) {
+    lines.push('• 產品側：');
+    for (const [name, p] of products) {
+      const parts = [];
+      if (p.target != null) parts.push(`目標${numStr(p.target)}台`);
+      if (p.achieved != null) parts.push(`達成${numStr(p.achieved)}台`);
+      const pRate = p.target ? safeDiv(p.achieved, p.target) : null;
+      if (pRate != null) parts.push(`達成率${pRate.toFixed(0)}%`);
+      if (p.yoy != null) parts.push(`YOY ${p.yoy > 0 ? '+' : ''}${p.yoy.toFixed(0)}%`);
+      lines.push(`  ◦ ${name}：${parts.join('，')}`);
+    }
+    // 產品佔比
+    const mix = data.product_breakdown._mix;
+    if (mix) {
+      lines.push('  ◦ 產品佔比：');
+      if (mix.current) lines.push(`    ▪ ${mix.current}`);
+      if (mix.previous) lines.push(`      • 上代佔比：${mix.previous}`);
+    }
+    lines.push('');
+  }
+
+  // 配置佔比
+  if (data.config_mix.current.length) {
+    lines.push('  ◦ 配置佔比：');
+    for (const cfg of data.config_mix.current) {
+      lines.push(`    ▪ ${cfg.name}：${cfg.value.toFixed(0)}%`);
+    }
+    for (const cfg of (data.config_mix.previous || [])) {
+      lines.push(`      • 上代佔比：${cfg.name}：${cfg.value.toFixed(0)}%`);
+    }
+    lines.push('');
+  }
+
+  // 顏色佔比
+  if (data.color_mix.current.length) {
+    lines.push('  ◦ 顏色佔比：');
+    for (const c of data.color_mix.current) {
+      lines.push(`    ▪ ${c.name}：${c.value.toFixed(0)}%`);
+    }
+    for (const c of (data.color_mix.previous || [])) {
+      lines.push(`      • 上代佔比：${c.name}：${c.value.toFixed(0)}%`);
+    }
+    lines.push('');
+  }
+
+  // 渠道側
+  if (data.channel_breakdown.length) {
+    lines.push('• 渠道側：');
+    for (const ch of data.channel_breakdown) {
+      const parts = [];
+      if (ch.target != null) parts.push(`目標${numStr(ch.target)}台`);
+      if (ch.achieved != null) parts.push(`達成${numStr(ch.achieved)}台`);
+      const chRate = safeDiv(ch.achieved, ch.target);
+      if (chRate != null) parts.push(`目標達成率${chRate.toFixed(0)}%`);
+      if (ch.yoy != null) parts.push(`YOY ${ch.yoy > 0 ? '+' : ''}${ch.yoy.toFixed(0)}%`);
+      lines.push(`  ◦ ${ch.name}：${parts.join('，')}`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
 // ===== 卡片生成 =====
 function buildCard(data, title) {
   const s = data.summary;
@@ -535,8 +637,16 @@ function renderPreview(card) {
   el.innerHTML = html;
 }
 
+function renderTextPreview() {
+  const el = document.getElementById('textPreview');
+  if (!el || !currentText) return;
+  el.textContent = currentText;
+  el.style.display = 'block';
+}
+
 // ===== 全局狀態 =====
 let currentCard = null;
+let currentText = '';
 let currentTitle = 'P12系列';
 
 // ===== UI 交互 =====
@@ -581,13 +691,22 @@ function generateReport() {
     }
 
     currentCard = buildCard(data, currentTitle);
+    currentText = generateText(data, currentTitle);
     renderPreview(currentCard);
+    renderTextPreview();
     document.getElementById('previewActions').style.display = 'flex';
     showToast('✅ 日報生成成功！');
   } catch (e) {
     showToast('❌ 解析失敗: ' + e.message);
     console.error(e);
   }
+}
+
+function copyText() {
+  if (!currentText) return;
+  navigator.clipboard.writeText(currentText)
+    .then(() => showToast('✅ 純文本已複製到剪貼板，可直接發群'))
+    .catch(() => showToast('❌ 複製失敗'));
 }
 
 function copyJSON() {

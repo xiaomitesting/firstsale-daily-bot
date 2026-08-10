@@ -248,3 +248,132 @@ def build_card(data: dict[str, Any]) -> dict:
             "components": components
         }
     }
+
+
+def generate_text(data: dict[str, Any], title: str = "") -> str:
+    """從解析後的數據生成純文本日報（可複製發群）"""
+    s = data.get("summary", {})
+    if not title:
+        title = s.get("title", "P12系列")
+    lines = []
+
+    # 標題行：P12系列首銷激活進展DAY 32 - 6/29（時間進度97%）
+    header = f"{title}首銷激活進展"
+    if s.get("day_number"):
+        header += f"DAY {s['day_number']}"
+    date_part = ""
+    if s.get("report_date"):
+        date_str = str(s["report_date"])
+        import re
+        m = re.match(r"(\d{4})-(\d{1,2})-(\d{1,2})", date_str)
+        if m:
+            date_part = f"{int(m.group(2))}/{int(m.group(3))}"
+        else:
+            date_part = date_str
+    tp_part = ""
+    if s.get("time_progress"):
+        tp_part = f"時間進度{s['time_progress']}%"
+    # 拼接：header - date_part（tp_part）
+    if date_part and tp_part:
+        lines.append(f"{header} - {date_part}（{tp_part}）")
+    elif date_part:
+        lines.append(f"{header} - {date_part}（）")
+    elif tp_part:
+        lines.append(f"{header}（{tp_part}）")
+    else:
+        lines.append(header)
+    lines.append("")
+
+    # 銷售數據摘要
+    summary_parts = []
+    target = s.get("target")
+    achieved = s.get("achieved")
+    if target is not None:
+        summary_parts.append(f"首銷目標{num_str(target)}台")
+    if achieved is not None:
+        summary_parts.append(f"首銷達成{num_str(achieved)}台")
+    rate = s.get("achievement_rate") or safe_div(achieved, target)
+    if rate is not None:
+        summary_parts.append(f"首銷達成率{rate:.0f}%")
+    behind = s.get("behind_time_progress")
+    if behind is not None:
+        summary_parts.append(f"落後時間進度{behind:.0f}pp")
+    prev_gen = s.get("previous_gen_total")
+    if prev_gen is not None:
+        summary_parts.append(f"上代同期達成{num_str(prev_gen)}台")
+    yoy = s.get("yoy")
+    if yoy is not None:
+        summary_parts.append(f"YOY {yoy:+.0f}%")
+    lines.append("• 銷售數據：" + "，".join(summary_parts))
+    lines.append("")
+
+    # 產品側
+    products = {k: v for k, v in data.get("product_breakdown", {}).items() if not k.startswith("_")}
+    if products:
+        lines.append("• 產品側：")
+        for pname, pdata in products.items():
+            parts = []
+            p_target = pdata.get("target")
+            p_achieved = pdata.get("achieved")
+            if p_target is not None:
+                parts.append(f"目標{num_str(p_target)}台")
+            if p_achieved is not None:
+                parts.append(f"達成{num_str(p_achieved)}台")
+            p_rate = safe_div(p_achieved, p_target)
+            if p_rate is not None:
+                parts.append(f"達成率{p_rate:.0f}%")
+            p_yoy = pdata.get("yoy")
+            if p_yoy is not None:
+                parts.append(f"YOY {p_yoy:+.0f}%")
+            lines.append(f"  ◦ {pname}：{"，".join(parts)}")
+        mix = data.get("product_breakdown", {}).get("_mix", {})
+        if mix:
+            lines.append("  ◦ 產品佔比：")
+            if mix.get("current"):
+                lines.append(f"    ▪ {mix['current']}")
+            if mix.get("previous"):
+                lines.append(f"      • 上代佔比：{mix['previous']}")
+        lines.append("")
+
+    # 配置佔比
+    configs = data.get("config_mix", {})
+    if configs.get("current"):
+        lines.append("  ◦ 配置佔比：")
+        for cfg in configs["current"]:
+            lines.append(f"    ▪ {cfg['name']}：{cfg['value']:.0f}%")
+        for cfg in configs.get("previous", []):
+            lines.append(f"      • 上代佔比：{cfg['name']}：{cfg['value']:.0f}%")
+        lines.append("")
+
+    # 顏色佔比
+    colors = data.get("color_mix", {})
+    if colors.get("current"):
+        lines.append("  ◦ 顏色佔比：")
+        for c in colors["current"]:
+            lines.append(f"    ▪ {c['name']}：{c['value']:.0f}%")
+        for c in colors.get("previous", []):
+            lines.append(f"      • 上代佔比：{c['name']}：{c['value']:.0f}%")
+        lines.append("")
+
+    # 渠道側
+    channels = data.get("channel_breakdown", [])
+    if channels:
+        lines.append("• 渠道側：")
+        for ch in channels:
+            parts = []
+            ch_target = ch.get("target")
+            ch_achieved = ch.get("achieved")
+            if ch_target is not None:
+                parts.append(f"目標{num_str(ch_target)}台")
+            if ch_achieved is not None:
+                parts.append(f"達成{num_str(ch_achieved)}台")
+            ch_rate = safe_div(ch_achieved, ch_target)
+            if ch_rate is not None:
+                parts.append(f"目標達成率{ch_rate:.0f}%")
+            ch_yoy = ch.get("yoy")
+            if ch_yoy is not None:
+                parts.append(f"YOY {ch_yoy:+.0f}%")
+            lines.append(f"  ◦ {ch['name']}：{"，".join(parts)}")
+        lines.append("")
+
+    return "\n".join(lines)

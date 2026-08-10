@@ -14,7 +14,7 @@ import argparse, json, sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.parser import parse_clipboard, parse_file
-from src.card import build_card
+from src.card import build_card, generate_text
 
 
 def main():
@@ -23,6 +23,7 @@ def main():
     group.add_argument("--paste", action="store_true", help="從剪貼板讀取數據")
     group.add_argument("--file", "-f", help="數據文件路徑（TSV 或 JSON）")
     parser.add_argument("--output", "-o", default="output/card.json", help="輸出路徑")
+    parser.add_argument("--text", action="store_true", help="輸出純文本日報（可複製發群）")
     parser.add_argument("--pretty", action="store_true", help="格式化 JSON 輸出")
     args = parser.parse_args()
 
@@ -51,7 +52,25 @@ def main():
         print("  已達成\t15600", file=sys.stderr)
         sys.exit(1)
 
-    # 3. 構建卡片
+    # 3. 構建卡片或文本
+    if args.text:
+        try:
+            text = generate_text(data)
+            # 輸出到文件或 stdout
+            if args.output and args.output != "output/card.json":
+                output_dir = os.path.dirname(args.output)
+                if output_dir:
+                    os.makedirs(output_dir, exist_ok=True)
+                with open(args.output, "w", encoding="utf-8") as f:
+                    f.write(text)
+                print(f"✅ 純文本日報已生成: {args.output}")
+            else:
+                print(text)
+        except Exception as e:
+            print(f"❌ 文本生成失敗: {e}", file=sys.stderr)
+            sys.exit(1)
+        return
+
     try:
         card_config = build_card(data)
     except Exception as e:
