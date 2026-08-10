@@ -683,42 +683,35 @@ async function fetchFeishu() {
     return;
   }
 
-  const info = parseFeishuUrl(url);
-  if (!info) {
-    statusEl.className = 'feishu-status error';
-    statusEl.textContent = '❌ 無法識別鏈接格式，請確認是飛書表格鏈接';
-    return;
-  }
-
   statusEl.className = 'feishu-status loading';
   statusEl.innerHTML = '<span class="spinner"></span>正在拉取數據...';
   fetchBtn.disabled = true;
 
   try {
-    // 用公開導出接口嘗試拉取
-    let data = null;
-
-    if (info.type === 'sheets') {
-      data = await fetchSheetsData(info.token);
-    } else if (info.type === 'wiki') {
-      // Wiki 需要先解析 node token 得到實際 doc token
-      data = await fetchWikiData(info.token);
-    } else if (info.type === 'base') {
-      statusEl.className = 'feishu-status error';
-      statusEl.innerHTML = '⚠️ 多維表格暫不支持自動拉取。<br>請在飛書中選中數據 → Ctrl+C → 粘貼到下方文本框。';
-      fetchBtn.disabled = false;
-      return;
-    } else {
-      statusEl.className = 'feishu-status error';
-      statusEl.innerHTML = '⚠️ 該類型文檔暫不支持自動拉取。<br>請在飛書中選中數據 → Ctrl+C → 粘貼到下方文本框。';
-      fetchBtn.disabled = false;
-      return;
+    // 調用後端代理讀取飛書數據
+    const API_BASE = window.location.hostname === 'localhost' 
+      ? 'http://localhost:3900' 
+      : 'http://localhost:3900'; // 部署後改為實際地址
+    
+    const resp = await fetch(`${API_BASE}/api/read`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ feishuUrl: url }),
+    });
+    
+    const result = await resp.json();
+    
+    if (!resp.ok || !result.ok) {
+      throw new Error(result.error || '拉取失敗');
     }
-
-    if (data && data.trim()) {
-      document.getElementById('feishuTsv').value = data;
+    
+    // 將飛書數據轉為 TSV 格式
+    const tsv = feishuValuesToTSV(result.values);
+    
+    if (tsv.trim()) {
+      document.getElementById('feishuTsv').value = tsv;
       statusEl.className = 'feishu-status success';
-      statusEl.textContent = '✅ 數據已拉取！點擊下方「用粘貼的數據生成日報」繼續。';
+      statusEl.textContent = `✅ 數據已拉取！(${result.sheetName}) 點擊下方「用粘貼的數據生成日報」繼續。`;
     } else {
       throw new Error('返回數據為空');
     }
@@ -731,16 +724,16 @@ async function fetchFeishu() {
   }
 }
 
-async function fetchSheetsData(token) {
-  // 嘗試用公開導出接口
-  const exportUrl = `https://open.feishu.cn/open-apis/sheets/v2/export/${token}`;
-  // 由於 CORS 限制，直接調用會失敗
-  // 改用提示用戶手動粘貼
-  throw new Error('飛書表格需要授權才能訪問，請手動粘貼數據');
-}
-
-async function fetchWikiData(token) {
-  throw new Error('飛書 Wiki 需要授權才能訪問，請手動粘貼數據');
+function feishuValuesToTSV(values) {
+  // 飛書 API 返回的 values 是二維數組，轉為 TSV
+  if (!values || !values.length) return '';
+  return values.map(row => {
+    if (!row) return '';
+    return row.map(cell => {
+      if (cell === null || cell === undefined) return '';
+      return String(cell).replace(/\t/g, ' '); // 替換 tab 避免格式錯亂
+    }).join('\t');
+  }).join('\n');
 }
 
 function useFeishuTsv() {
