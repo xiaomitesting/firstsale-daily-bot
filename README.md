@@ -1,126 +1,89 @@
-# P12 首銷日報機器人
+# 首銷日報機器人
 
-把飛書表格貼進去，自動生成首銷日報卡片。
+貼入飛書表格數據，一鍵生成首銷日報飛書卡片。
 
-## 快速開始
+🔗 **[線上演示](https://xiaomitesting.github.io/firstsale-daily-bot/)**
 
-```bash
-# 1. 安裝依賴（僅需 pyperclip）
-pip install -r requirements.txt
+## 功能
 
-# 2. 貼入數據並生成卡片
-python run.py --paste
-
-# 3. 或者指定數據文件
-python run.py --file examples/sample.tsv
-```
-
-## 數據輸入方式
-
-### 方式一：直接貼上（推薦）
-
-1. 在飛書表格中選中數據區域，Ctrl+C 複製
-2. 執行 `python run.py --paste`
-3. 自動解析並生成卡片
-
-### 方式二：TSV 文件
-
-從飛書表格複製後，粘貼到文本文件保存為 `.tsv`，然後：
-
-```bash
-python run.py --file your_data.tsv
-```
-
-### 方式三：JSON 文件
-
-```bash
-python run.py --file your_data.json
-```
+- ✅ 飛書表格 TSV 直接貼上
+- ✅ 文件上傳（TSV / JSON）
+- ✅ 預設模板（手機 / 平板）
+- ✅ 卡片實時預覽
+- ✅ 一鍵複製 JSON
+- ✅ 下載 JSON 文件
+- ✅ 輸出 Markdown 格式
+- ✅ 通用：不限產品線，任意首銷日報都能用
 
 ## 數據格式
 
-### TSV 格式（飛書表格直接貼上）
+支持多段數據，每段有獨立表頭：
 
-第一行是表頭，後續行是數據。支持以下列名（中英文均可）：
+| 段落 | 表頭 | 說明 | 必填 |
+|------|------|------|------|
+| 核心指標 | `指標 數值` | 首銷目標、已達成、YOY 等 | ✅ |
+| 每日 SO | `日期 SO 上代SO` | 折線圖數據 | 🟡 |
+| 產品側 | `產品 目標 已達成 YOY` | 各型號拆分 | 🟡 |
+| 渠道側 | `渠道 目標 已達成 YOY` | 各渠道拆分 | 🟡 |
+| 配置佔比 | `配置 本代 上代` | 存儲配置 | 🟡 |
+| 顏色佔比 | `顏色 本代 上代` | 顏色分佈 | 🟡 |
 
-| 列名（中文） | 列名（英文） | 說明 | 必填 |
-|-------------|-------------|------|------|
-| 指標 | metric | 指標名稱 | ✅ |
-| 數值 | value | 對應數值 | ✅ |
+## 快速開始
 
-**必須包含的指標行：**
+### 方式一：線上市場（推薦）
 
-```
-指標	數值
-首銷目標	19456
-已達成	15600
-落后時間進度	16.8
-上代同期	15600
-YOY	85.8
-時間進度	97.0
-首銷日期	2026-05-29
-報告日期	2026-06-29
-DAY	32
-```
+直接訪問 https://xiaomitesting.github.io/firstsale-daily-bot/
 
-**可選的每日 SO 數據（折線圖用）：**
+### 方式二：本地運行
 
-```
-日期	SO	上代SO
-5/29	749	868
-5/30	1400	1665
-...
+```bash
+# 進入 web 目錄
+cd web
+
+# 啟動本地服務器
+python3 -m http.server 8080
+
+# 打開瀏覽器訪問
+open http://localhost:8080
 ```
 
-**可選的產品側數據：**
+### 方式三：Python CLI
 
-```
-產品	目標	已達成	YOY
-P12U	11674	9530	60.9
-P12A	7782	6070	31.7
-```
-
-**可選的渠道側數據：**
-
-```
-渠道	目標	已達成	YOY
-米網	2608	2092	80.2
-米店	4472	3461	77.4
-運營商	7266	6100	83.9
-KA	4238	3332	78.6
-GC&澳門	872	615	70.5
+```bash
+pip install -r requirements.txt
+python run.py --file examples/sample.tsv
 ```
 
-### JSON 格式
+## 使用流程
 
-見 `examples/sample.json`
+1. 從飛書表格選中數據 → `Ctrl+C` 複製
+2. 打開網站 → 粘貼到輸入框
+3. 點擊「生成日報」
+4. 右側預覽卡片效果
+5. 點擊「複製 JSON」→ 在飛書機器人中發送
 
-## 輸出
+## 技術棧
 
-- 卡片 JSON 文件：`output/card.json`
-- 終端打印卡片 JSON（可直接用於飛書發送）
-
-## 自定義
-
-- 修改 `templates/p12_template.json` 調整卡片樣式
-- 修改 `src/report.py` 中的映射邏輯
+- 純前端：HTML + CSS + JavaScript（無後端）
+- 部署：GitHub Pages
+- 卡片格式：飛書互動卡片 Schema 2.0
 
 ## 文件結構
 
 ```
 firstsale-daily-bot/
-├── README.md
-├── requirements.txt
-├── run.py                  # 入口
-├── src/
-│   ├── __init__.py
-│   ├── parser.py           # 數據解析（TSV/JSON）
-│   ├── report.py           # 報告生成邏輯
-│   └── card.py             # 飛書卡片構建
-├── templates/
-│   └── p12_template.json   # 卡片模板
-├── examples/
-│   ├── sample.tsv          # 示例 TSV
-│   └── sample.json         # 示例 JSON
-└── output/                 # 輸出目錄
+├── web/                    # 網站（GitHub Pages）
+│   ├── index.html          # 主頁面
+│   ├── style.css           # 樣式
+│   └── app.js              # 核心邏輯
+├── src/                    # Python CLI
+│   ├── parser.py           # TSV/JSON 解析
+│   └── card.py             # 卡片構建
+├── examples/               # 示例數據
+├── run.py                  # CLI 入口
+└── README.md
 ```
+
+## License
+
+MIT

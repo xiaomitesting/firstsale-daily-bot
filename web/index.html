@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>首銷日報機器人</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 頂部導航 -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="logo">📊</span>
+      <span class="brand-text">首銷日報機器人</span>
+    </div>
+    <div class="nav-links">
+      <a href="#" class="active" onclick="showSection('generator')">日報生成</a>
+      <a href="#" onclick="showSection('guide')">使用指南</a>
+      <a href="#" onclick="showSection('templates')">模板庫</a>
+    </div>
+  </nav>
+
+  <!-- 主內容 -->
+  <main class="container">
+    <!-- 日報生成區 -->
+    <section id="generator" class="section active">
+      <div class="hero">
+        <h1>貼入數據，一鍵出日報</h1>
+        <p>從飛書表格複製數據，粘貼到下方，自動生成首銷日報飛書卡片</p>
+      </div>
+
+      <div class="grid-2">
+        <!-- 左側：輸入 -->
+        <div class="card input-card">
+          <h2>📋 數據輸入</h2>
+          
+          <div class="form-group">
+            <label>產品系列名稱</label>
+            <input type="text" id="productTitle" placeholder="例：P12系列、O12系列、Note 14系列" value="P12系列">
+          </div>
+
+          <div class="form-group">
+            <label>數據來源</label>
+            <div class="tabs">
+              <button class="tab active" onclick="switchTab('paste')">直接貼上</button>
+              <button class="tab" onclick="switchTab('file')">上傳文件</button>
+              <button class="tab" onclick="switchTab('template')">使用模板</button>
+            </div>
+          </div>
+
+          <!-- 貼上模式 -->
+          <div id="tab-paste" class="tab-content active">
+            <div class="form-group">
+              <label>飛書表格數據 <span class="hint">（從飛書選中 → Ctrl+C → 粘貼到這裡）</span></label>
+              <textarea id="tsvInput" rows="18" placeholder="指標	數值
+首銷目標	19456
+已達成	15600
+...
+
+日期	SO	上代SO
+5/29	749	868
+...
+
+產品	目標	已達成	YOY
+P12U	11674	9530	60.9
+P12A	7782	6070	31.7
+
+渠道	目標	已達成	YOY
+米網	2608	2092	80.2
+..."></textarea>
+            </div>
+          </div>
+
+          <!-- 文件上傳模式 -->
+          <div id="tab-file" class="tab-content">
+            <div class="upload-zone" id="dropZone">
+              <span class="upload-icon">📁</span>
+              <p>拖拽 TSV / JSON 文件到這裡</p>
+              <p class="hint">或點擊選擇文件</p>
+              <input type="file" id="fileInput" accept=".tsv,.json,.txt" hidden>
+            </div>
+            <div id="fileName" class="file-name"></div>
+          </div>
+
+          <!-- 模板模式 -->
+          <div id="tab-template" class="tab-content">
+            <div class="template-list">
+              <div class="template-item" onclick="loadTemplate('phone')">
+                <span class="template-icon">📱</span>
+                <div>
+                  <strong>手機首銷日報</strong>
+                  <p>適用於 P12/O12/Note 等手機系列</p>
+                </div>
+              </div>
+              <div class="template-item" onclick="loadTemplate('tablet')">
+                <span class="template-icon">📟</span>
+                <div>
+                  <strong>平板首銷日報</strong>
+                  <p>適用於 Pad 系列平板產品</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn-primary" onclick="generateReport()">
+            🚀 生成日報
+          </button>
+        </div>
+
+        <!-- 右側：預覽 -->
+        <div class="card preview-card">
+          <h2>👁️ 卡片預覽</h2>
+          <div id="preview" class="preview-area">
+            <div class="empty-state">
+              <span class="empty-icon">📊</span>
+              <p>左側輸入數據後點擊「生成日報」</p>
+              <p class="hint">卡片會在這裡實時預覽</p>
+            </div>
+          </div>
+          <div class="preview-actions" id="previewActions" style="display:none;">
+            <button class="btn-secondary" onclick="copyJSON()">📋 複製 JSON</button>
+            <button class="btn-secondary" onclick="downloadJSON()">💾 下載 JSON</button>
+            <button class="btn-secondary" onclick="copyMarkdown()">📝 複製 Markdown</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 使用指南 -->
+    <section id="guide" class="section" style="display:none;">
+      <div class="card">
+        <h2>📖 使用指南</h2>
+        
+        <h3>第一步：準備數據</h3>
+        <p>從飛書表格中選中數據區域，按 <code>Ctrl+C</code> 複製。</p>
+        
+        <h3>數據格式</h3>
+        <p>支持多段數據，每段有獨立表頭：</p>
+        
+        <table class="guide-table">
+          <thead>
+            <tr><th>段落</th><th>表頭</th><th>說明</th><th>必填</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>核心指標</td><td><code>指標 數值</code></td><td>首銷目標、已達成、YOY 等</td><td>✅</td></tr>
+            <tr><td>每日 SO</td><td><code>日期 SO 上代SO</code></td><td>折線圖數據</td><td>🟡</td></tr>
+            <tr><td>產品側</td><td><code>產品 目標 已達成 YOY</code></td><td>各型號拆分</td><td>🟡</td></tr>
+            <tr><td>渠道側</td><td><code>渠道 目標 已達成 YOY</code></td><td>各渠道拆分</td><td>🟡</td></tr>
+            <tr><td>配置佔比</td><td><code>配置 本代 上代</code></td><td>存儲配置</td><td>🟡</td></tr>
+            <tr><td>顏色佔比</td><td><code>顏色 本代 上代</code></td><td>顏色分佈</td><td>🟡</td></tr>
+          </tbody>
+        </table>
+
+        <h3>核心指標（必填）</h3>
+        <div class="code-block">
+          指標	數值<br>
+          標題	P12系列<br>
+          首銷目標	19456<br>
+          已達成	15600<br>
+          落後時間進度	16.8<br>
+          上代同期	15600<br>
+          YOY	85.8<br>
+          時間進度	97.0<br>
+          首銷日期	2026-05-29<br>
+          報告日期	2026-06-29<br>
+          DAY	32
+        </div>
+
+        <h3>第二步：生成</h3>
+        <p>粘貼數據後點擊「生成日報」，右側會實時預覽卡片效果。</p>
+
+        <h3>第三步：使用</h3>
+        <p>點擊「複製 JSON」，然後在飛書機器人中發送，或通過 API 發送卡片。</p>
+      </div>
+    </section>
+
+    <!-- 模板庫 -->
+    <section id="templates" class="section" style="display:none;">
+      <div class="card">
+        <h2>📦 模板庫</h2>
+        <div class="template-grid">
+          <div class="template-card" onclick="loadTemplate('phone')">
+            <span class="template-icon large">📱</span>
+            <h3>手機首銷日報</h3>
+            <p>P12 / O12 / Note 系列</p>
+            <span class="tag">預設</span>
+          </div>
+          <div class="template-card" onclick="loadTemplate('tablet')">
+            <span class="template-icon large">📟</span>
+            <h3>平板首銷日報</h3>
+            <p>Pad / Redmi Pad 系列</p>
+            <span class="tag">預設</span>
+          </div>
+          <div class="template-card" onclick="loadTemplate('custom')">
+            <span class="template-icon large">✏️</span>
+            <h3>自定義</h3>
+            <p>從空白開始</p>
+            <span class="tag">空白</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast 通知 -->
+  <div id="toast" class="toast"></div>
+
+  <footer>
+    <p>首銷日報機器人 v1.0 · Powered by OpenClaw 🦞</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
