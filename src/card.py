@@ -40,6 +40,7 @@ def build_card(data: dict[str, Any]) -> dict:
     achieved = summary.get("achieved")
     achv_rate = safe_div(achieved, target) or summary.get("achievement_rate")
     behind = summary.get("behind_time_progress")
+    progress_gap = summary.get("progress_gap")
     prev_gen = summary.get("previous_gen_total")
     yoy = summary.get("yoy")
 
@@ -52,6 +53,8 @@ def build_card(data: dict[str, Any]) -> dict:
         kpi_items.append({"title": "達成率", "value": f"{achv_rate:.1f}%"})
     if behind is not None:
         kpi_items.append({"title": "落後時間進度", "value": f"{behind:.1f}pp"})
+    if progress_gap is not None:
+        kpi_items.append({"title": "進度落差", "value": f"{progress_gap:.1f}%"})
     if prev_gen is not None:
         kpi_items.append({"title": "上代同期", "value": num_str(prev_gen)})
     if yoy is not None:

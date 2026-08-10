@@ -10,24 +10,38 @@ from typing import Any
 
 
 # ===== 指標名稱映射（中文 → 英文 key）=====
-METRIC_ALIASES = {
+METRIC_ALIASES: dict[str, Any] = {
     # 核心指標
     "首銷目標": "target",
+    "首销目标": "target",
     "目标": "target",
     "target": "target",
     "已達成": "achieved",
     "已达成": "achieved",
     "achieved": "achieved",
+    "首销合计达成": "achieved",
+    "首銷合計達成": "achieved",
     "達成率": "achievement_rate",
     "达成率": "achievement_rate",
     "achievement_rate": "achievement_rate",
+    "整體達成率": "achievement_rate",
+    "整体达成率": "achievement_rate",
+    "落後時間進度": "behind_time_progress",
     "落后時間進度": "behind_time_progress",
     "落后时间进度": "behind_time_progress",
     "behind_time_progress": "behind_time_progress",
+    "進度落差": "progress_gap",
+    "进度落差": "progress_gap",
+    "progress_gap": "progress_gap",
     "上代同期": "previous_gen_total",
+    "上代达成": "previous_gen_total",
+    "上代達成": "previous_gen_total",
     "previous_gen_total": "previous_gen_total",
     "YOY": "yoy",
     "yoy": "yoy",
+    "同比": "yoy",
+    "同比变幅": "yoy",
+    "同比變幅": "yoy",
     "時間進度": "time_progress",
     "时间进度": "time_progress",
     "time_progress": "time_progress",
@@ -46,6 +60,10 @@ METRIC_ALIASES = {
     "title": "title",
     "標題": "title",
     "标题": "title",
+    # 渠道名跳過（不作為指標）
+    "渠道": None,
+    "channel": None,
+    "渠道名": None,
     # 產品側
     "P12U": {"product": "P12U"},
     "P12A": {"product": "P12A"},
@@ -83,13 +101,23 @@ CHANNEL_ALIASES = {
     "GC": "GC&澳門",
     "GC&澳門": "GC&澳門",
     "gc": "GC&澳門",
+    "丰泽": "豐澤",
+    "衛訊": "衛訊",
+    "卫讯": "衛訊",
+    "苏宁": "蘇寧",
+    "百老匯": "百老匯",
+    "百老汇": "百老匯",
+    "澳门电讯": "澳門電訊",
+    "澳门红星源": "澳門紅星源",
+    "小米之家": "米店",
+    "小米商城": "米網",
 }
 
 
 def parse_tsv(text: str) -> dict[str, Any]:
     """解析 TSV 格式（飛書表格貼上）
 
-    支持多段數據，用空行分隔：
+    支持多段數據，用空行或表頭偵測分隔：
     - 第一段：核心指標
     - 第二段（可選）：每日 SO
     - 第三段（可選）：產品側
@@ -103,12 +131,13 @@ def parse_tsv(text: str) -> dict[str, Any]:
     segments = []
     current = []
 
+    header_keywords = {"日期", "date", "產品", "产品", "渠道", "channel",
+                      "配置", "config", "顏色", "颜色", "color"}
+
     for line in lines:
         cols = [c.strip().lower() for c in line.split("\t")]
         first_col = cols[0]
         # 表頭判定：第一列精確匹配已知表頭詞，且列數 >= 2
-        header_keywords = {"日期", "date", "產品", "产品", "渠道", "channel",
-                          "配置", "config", "顏色", "颜色", "color"}
         is_header = first_col in header_keywords and len(cols) >= 2
         if is_header and current:
             segments.append(current)
@@ -155,32 +184,76 @@ def _parse_segment(lines: list[str], result: dict):
 
 
 def _parse_summary(header: list[str], rows: list[str], result: dict):
-    """解析核心指標段"""
+    """解析核心指標段
+
+    支持兩種格式：
+    1. key\\tvalue 行格式（每行一個指標）
+    2. 表頭-數據兩行格式（第一行為指標名，第二行為數值）
+    """
+    # 先偵測是否為「表頭+數據」兩行格式
+    if len(rows) >= 1 and len(header) >= 2:
+        first_row_cols = [c.strip() for c in rows[0].split("\t")]
+        # 判斷第一行是否全為數值（即表頭-數值兩行格式）
+        all_numeric = all(_parse_num(c) is not None or c == "" for c in first_row_cols if c)
+        if all_numeric and len(first_row_cols) >= 2:
+            # 表頭-數值兩行格式：header[i] 為指標名，rows[0][i] 為對應值
+            for i, h in enumerate(header):
+                h = h.strip()
+                if i >= len(first_row_cols):
+                    continue
+                val = first_row_cols[i].strip()
+                if not h or not val:
+                    continue
+                eng = METRIC_ALIASES.get(h, h)
+                if eng is None:
+                    continue
+                if isinstance(eng, str) and eng in ("launch_date", "report_date", "title"):
+                    result["summary"][eng] = val
+                elif isinstance(eng, str):
+                    result["summary"][eng] = _parse_num(val)
+                elif isinstance(eng, dict):
+                    product = eng["product"]
+                    field = eng.get("field", "achieved")
+                    if product not in result["product_breakdown"]:
+                        result["product_breakdown"][product] = {}
+                    result["product_breakdown"][product][field] = _parse_num(val)
+                elif eng == "product_mix":
+                    result["product_breakdown"]["_mix"] = result["product_breakdown"].get("_mix", {})
+                    result["product_breakdown"]["_mix"]["current"] = val
+                elif eng == "product_mix_prev":
+                    result["product_breakdown"]["_mix"] = result["product_breakdown"].get("_mix", {})
+                    result["product_breakdown"]["_mix"]["previous"] = val
+            return
+
+    # 傳統行格式：key\tvalue
     for row in rows:
         cols = row.split("\t")
         if len(cols) < 2:
             continue
         key = cols[0].strip()
         val = cols[1].strip()
-
+        if not key or not val:
+            continue
         # 映射到英文 key
         eng = METRIC_ALIASES.get(key, key)
+        if eng is None:
+            continue  # 明確跳過（如渠道名）
 
         if isinstance(eng, dict):
             # 產品側數據
             product = eng["product"]
-            field = eng.get("field", "achieved")  # 默認當作 achieved
+            field = eng.get("field", "achieved")
             if product not in result["product_breakdown"]:
                 result["product_breakdown"][product] = {}
             result["product_breakdown"][product][field] = _parse_num(val)
-        elif eng in ("product_mix",):
+        elif eng == "product_mix":
             result["product_breakdown"]["_mix"] = result["product_breakdown"].get("_mix", {})
             result["product_breakdown"]["_mix"]["current"] = val
-        elif eng in ("product_mix_prev",):
+        elif eng == "product_mix_prev":
             result["product_breakdown"]["_mix"] = result["product_breakdown"].get("_mix", {})
             result["product_breakdown"]["_mix"]["previous"] = val
         else:
-            result["summary"][eng] = _parse_num(val) if eng != "launch_date" and eng != "report_date" and eng != "title" else val
+            result["summary"][eng] = _parse_num(val) if eng not in ("launch_date", "report_date", "title") else val
 
 
 def _parse_daily_so(header: list[str], rows: list[str], result: dict):
@@ -301,10 +374,11 @@ def _find_col(header: list[str], candidates: list[str]) -> int:
 
 
 def _parse_num(s: str) -> float | None:
-    """解析數字"""
-    if not s or s in ("—", "-", "N/A", "NA", ""):
+    """解析數字，支持逗號、百分比、正負號、pp 等格式"""
+    if not s or s.strip() in ("—", "-", "N/A", "NA", "", "–"):
         return None
-    s = s.replace(",", "").replace("%", "").replace("+", "").strip()
+    s = s.strip()
+    s = s.replace(",", "").replace("%", "").replace("+", "").replace("pp", "").strip()
     try:
         return float(s) if "." in s else int(s)
     except ValueError:

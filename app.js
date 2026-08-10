@@ -74,9 +74,9 @@ function parseTSV(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
   if (!lines.length) throw new Error('數據為空');
 
-  // 按表頭偵測分段
+  // 按表頭偵測分段（支持更多表頭格式）
   const headerKw = new Set(['日期', 'date', '產品', '产品', '渠道', 'channel',
-    '配置', 'config', '顏色', '颜色', 'color']);
+    '配置', 'config', '顏色', '颜色', 'color', '指标', '指標', 'metric']);
   
   const segments = [];
   let current = [];
@@ -146,13 +146,48 @@ function findCol(header, candidates) {
 }
 
 function parseNum(s) {
-  if (!s || s === '—' || s === '-' || s === 'N/A') return null;
-  const clean = s.replace(/[,+%]/g, '').trim();
+  if (!s || s === '—' || s === '-' || s === 'N/A' || s === '–') return null;
+  const clean = s.replace(/[,+%pp]/g, '').trim();
   const n = Number(clean);
   return isNaN(n) ? null : n;
 }
 
 function parseSummary(header, rows, result) {
+  // 偵測「表頭+數據」兩行格式：header 為指標名，第一行為數值
+  if (rows.length >= 1 && header.length >= 2) {
+    const firstRowCols = rows[0].split('\t').map(c => c.trim());
+    const allNumeric = firstRowCols.every(c => c === '' || parseNum(c) != null);
+    if (allNumeric && firstRowCols.length >= 2) {
+      // 表頭-數值兩行格式
+      for (let i = 0; i < header.length && i < firstRowCols.length; i++) {
+        const h = header[i].trim();
+        const val = firstRowCols[i].trim();
+        if (!h || !val) continue;
+        const eng = METRIC_MAP[h];
+        if (eng === null || eng === undefined) continue;
+        if (typeof eng === 'string') {
+          if (['launch_date', 'report_date', 'title'].includes(eng)) {
+            result.summary[eng] = val;
+          } else {
+            result.summary[eng] = parseNum(val);
+          }
+        } else if (typeof eng === 'object') {
+          const { product, field } = eng;
+          result.product_breakdown[product] = result.product_breakdown[product] || {};
+          result.product_breakdown[product][field || 'achieved'] = parseNum(val);
+        } else if (eng === 'product_mix') {
+          result.product_breakdown._mix = result.product_breakdown._mix || {};
+          result.product_breakdown._mix.current = val;
+        } else if (eng === 'product_mix_prev') {
+          result.product_breakdown._mix = result.product_breakdown._mix || {};
+          result.product_breakdown._mix.previous = val;
+        }
+      }
+      return; // 已按表頭-數值兩行格式處理，跳過行格式
+    }
+  }
+
+  // 傳統行格式：key\tvalue
   for (const row of rows) {
     const cols = row.split('\t');
     if (cols.length < 2) continue;
@@ -191,28 +226,24 @@ function parseSummary(header, rows, result) {
     }
 
     // 智能偵測：無表頭時嘗試識別渠道行
-    // 模式: ...渠道名...目標...已達成... （數值在後面列）
     if (isLikelyChannelRow(cols)) {
-      // 找渠道名位置和數值位置
-      let channelName = null, targetVal = null, achievedVal = null;
+      let channelName = null;
       for (let i = 0; i < cols.length; i++) {
         const v = cols[i].trim();
         if (KNOWN_CHANNELS.includes(v)) {
           channelName = CHANNEL_MAP[v] || v;
         }
       }
-      // 數值通常是最後幾個數字列
       const nums = cols.filter(c => /^\d+[\d,.]*$/.test(c.trim()));
       if (channelName && nums.length >= 2) {
-        targetVal = parseNum(nums[nums.length - 2]);
-        achievedVal = parseNum(nums[nums.length - 1]);
-        // 避免重複添加
+        const targetVal = parseNum(nums[nums.length - 2]);
+        const achievedVal = parseNum(nums[nums.length - 1]);
         const exists = result.channel_breakdown.some(c => c.name === channelName);
         if (!exists && (targetVal || achievedVal)) {
           result.channel_breakdown.push({ name: channelName, target: targetVal, achieved: achievedVal, yoy: null });
         }
       } else if (channelName && nums.length === 1) {
-        achievedVal = parseNum(nums[0]);
+        const achievedVal = parseNum(nums[0]);
         const exists = result.channel_breakdown.some(c => c.name === channelName);
         if (!exists && achievedVal) {
           result.channel_breakdown.push({ name: channelName, target: null, achieved: achievedVal, yoy: null });
@@ -317,6 +348,7 @@ function buildCard(data, title) {
   const rate = s.achievement_rate || safeDiv(s.achieved, s.target);
   if (rate != null) kpiItems.push({ title: '達成率', value: rate.toFixed(1) + '%' });
   if (s.behind_time_progress != null) kpiItems.push({ title: '落後時間進度', value: s.behind_time_progress.toFixed(1) + 'pp' });
+  if (s.progress_gap != null) kpiItems.push({ title: '進度落差', value: s.progress_gap.toFixed(1) + '%' });
   if (s.previous_gen_total != null) kpiItems.push({ title: '上代同期', value: numStr(s.previous_gen_total) });
   if (s.yoy != null) kpiItems.push({ title: 'YOY', value: s.yoy.toFixed(1) + '%' });
   if (kpiItems.length) components.push({ type: 'kpi_group', items: kpiItems });
