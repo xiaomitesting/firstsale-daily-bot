@@ -365,6 +365,7 @@ function generateText(data, title) {
   const rate = s.achievement_rate || safeDiv(s.achieved, s.target);
   if (rate != null) summaryParts.push(`首銷達成率${rate.toFixed(0)}%`);
   if (s.behind_time_progress != null) summaryParts.push(`落後時間進度${s.behind_time_progress.toFixed(0)}pp`);
+  if (s.progress_gap != null && s.progress_gap !== s.behind_time_progress) summaryParts.push(`進度落差${s.progress_gap.toFixed(0)}pp`);
   if (s.previous_gen_total != null) summaryParts.push(`上代同期達成${numStr(s.previous_gen_total)}台`);
   if (s.yoy != null) summaryParts.push(`YOY ${s.yoy > 0 ? '+' : ''}${s.yoy.toFixed(0)}%`);
   if (s.day_number && s.daily_target) summaryParts.push(`Day ${s.day_number}激活目標${numStr(s.daily_target)}台`);

@@ -298,6 +298,9 @@ def generate_text(data: dict[str, Any], title: str = "") -> str:
     behind = s.get("behind_time_progress")
     if behind is not None:
         summary_parts.append(f"落後時間進度{behind:.0f}pp")
+    pg = s.get("progress_gap")
+    if pg is not None and pg != behind:
+        summary_parts.append(f"進度落差{pg:.0f}pp")
     prev_gen = s.get("previous_gen_total")
     if prev_gen is not None:
         summary_parts.append(f"上代同期達成{num_str(prev_gen)}台")
