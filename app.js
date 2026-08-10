@@ -37,7 +37,26 @@ const METRIC_MAP = {
 const CHANNEL_MAP = {
   '米网': '米網', '米店': '米店', '運營商': '運營商', '运营商': '運營商',
   'KA': 'KA', 'GC': 'GC&澳門', 'GC&澳門': 'GC&澳門', 'gc': 'GC&澳門',
+  '丰泽': '豐澤', '衛訊': '衛訊', '卫讯': '衛訊',
+  '苏宁': '蘇寧', '百老匯': '百老匯', '百老汇': '百老匯',
+  '澳门电讯': '澳門電訊', '澳门红星源': '澳門紅星源',
+  '合计': '合計', '小米之家': '米店', '小米商城': '米網',
 };
+
+// 已知渠道名列表，用於無表頭時自動偵測
+const KNOWN_CHANNELS = ['KA', '丰泽', '卫讯', '苏宁', '百老匯', '百老汇', 'GC', '澳门电讯', '澳门红星源',
+  '小米之家', '小米商城', '米家', '运营商', '电讯数码', '中国移动', 'CSL', '和记',
+  '中国联通', 'GC-代理', 'WISEJOY', 'DIGIWIN', 'EZO', 'GOOD PARTNER', 'SMART RICH'];
+
+// 判斷一行是否是渠道數據行（無表頭時的智能偵測）
+function isLikelyChannelRow(cols) {
+  // 在所有列中找已知渠道名
+  for (const c of cols) {
+    const v = c.trim();
+    if (KNOWN_CHANNELS.includes(v)) return true;
+  }
+  return false;
+}
 
 // ===== 工具函數 =====
 function numStr(v) {
@@ -151,10 +170,7 @@ function parseSummary(header, rows, result) {
       const eng = METRIC_MAP[key];
       // eng === null 表示這是渠道名等非指標，跳過
       if (eng === null || eng === undefined) {
-        // 嘗試用原始 key 作為指標名（容錯）
-        // 但如果 val 是空的或是另一個指標名，跳過
         if (!val || METRIC_MAP[val]) continue;
-        // 某些情況 key 是渠道名，val 是數值 → 跳過（渠道由 parseChannel 處理）
         if (/^\d+[\d,.%]*$/.test(val)) continue;
         continue;
       }
@@ -171,6 +187,36 @@ function parseSummary(header, rows, result) {
         result.product_breakdown._mix.previous = val;
       } else {
         result.summary[eng] = ['launch_date', 'report_date', 'title'].includes(eng) ? val : parseNum(val);
+      }
+    }
+
+    // 智能偵測：無表頭時嘗試識別渠道行
+    // 模式: ...渠道名...目標...已達成... （數值在後面列）
+    if (isLikelyChannelRow(cols)) {
+      // 找渠道名位置和數值位置
+      let channelName = null, targetVal = null, achievedVal = null;
+      for (let i = 0; i < cols.length; i++) {
+        const v = cols[i].trim();
+        if (KNOWN_CHANNELS.includes(v)) {
+          channelName = CHANNEL_MAP[v] || v;
+        }
+      }
+      // 數值通常是最後幾個數字列
+      const nums = cols.filter(c => /^\d+[\d,.]*$/.test(c.trim()));
+      if (channelName && nums.length >= 2) {
+        targetVal = parseNum(nums[nums.length - 2]);
+        achievedVal = parseNum(nums[nums.length - 1]);
+        // 避免重複添加
+        const exists = result.channel_breakdown.some(c => c.name === channelName);
+        if (!exists && (targetVal || achievedVal)) {
+          result.channel_breakdown.push({ name: channelName, target: targetVal, achieved: achievedVal, yoy: null });
+        }
+      } else if (channelName && nums.length === 1) {
+        achievedVal = parseNum(nums[0]);
+        const exists = result.channel_breakdown.some(c => c.name === channelName);
+        if (!exists && achievedVal) {
+          result.channel_breakdown.push({ name: channelName, target: null, achieved: achievedVal, yoy: null });
+        }
       }
     }
   }
@@ -496,9 +542,9 @@ function generateReport() {
     currentTitle = title || 'P12系列';
     const data = parseTSV(tsv);
 
-    // 驗證：至少有一個指標才生成
-    if (!data.summary.target && !data.summary.achieved && !data.summary.rate && data.channel_breakdown.length === 0) {
-      showToast('⚠️ 未找到核心指標，請檢查數據格式');
+    // 驗證：有任何數據就生成
+    if (data.channel_breakdown.length === 0 && data.daily_so.dates.length === 0 && Object.keys(data.product_breakdown).length === 0 && Object.keys(data.summary).length === 0) {
+      showToast('⚠️ 未識別到任何數據段，請確認貼上了完整表格（包含表頭行）');
       return;
     }
 
