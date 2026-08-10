@@ -1,0 +1,25 @@
+{
+  "name": "LEEDS",
+  "report_date": "2026-08-10",
+  "summary": {
+    "target": 2600,
+    "achieved": 623,
+    "rate": "24%",
+    "time_progress": "12%",
+    "progress_gap": "12%",
+    "prev_gen": 617,
+    "yoy": "1%"
+  },
+  "daily_so": {
+    "dates": ["08/07", "08/08", "08/09", "08/10", "08/11", "08/12", "08/13"],
+    "values": [201, 188, 234, 0, 0, 0, 0],
+    "prev_values": [130, 160, 150, 100, 100, 100, 100]
+  },
+  "channels": [
+    {"name": "電商", "target": 70, "achieved": 15},
+    {"name": "米家", "target": 1590, "achieved": 346},
+    {"name": "運營商", "target": 365, "achieved": 62},
+    {"name": "KA", "target": 435, "achieved": 189},
+    {"name": "其他", "target": 140, "achieved": 11}
+  ]
+}
